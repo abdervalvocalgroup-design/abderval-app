@@ -1,5 +1,5 @@
-import album1 from "../assets/album1.jpg";
-import album2 from "../assets/album2.jpg";
+const album1 = "https://via.placeholder.com/300";
+const album2 = "https://via.placeholder.com/300";
 
 export const albums = [
   {
