@@ -1,4 +1,4 @@
-
+```jsx
 import { useParams, Link } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import { albums, streamingLinks } from "../data/musicData";
@@ -13,15 +13,38 @@ export default function Album() {
   const album = albums.find((a) => a.id === id);
 
   const audioRefs = useRef({});
+  const previewTimerRef = useRef(null);
+
   const [activeTrack, setActiveTrack] = useState(null);
   const [showModal, setShowModal] = useState(false);
-  const [remainingTime, setRemainingTime] = useState(PREVIEW_DURATION);
+  const [remainingTime, setRemainingTime] =
+    useState(PREVIEW_DURATION);
+
+  const clearPreviewTimer = () => {
+    if (previewTimerRef.current) {
+      clearInterval(previewTimerRef.current);
+      previewTimerRef.current = null;
+    }
+  };
+
+  const stopAllTracks = () => {
+    clearPreviewTimer();
+
+    Object.values(audioRefs.current).forEach((audio) => {
+      if (audio) {
+        audio.pause();
+        audio.currentTime = 0;
+      }
+    });
+
+    setActiveTrack(null);
+  };
 
   useEffect(() => {
-    const audioElements = audioRefs.current;
-
     return () => {
-      Object.values(audioElements).forEach((audio) => {
+      clearPreviewTimer();
+
+      Object.values(audioRefs.current).forEach((audio) => {
         if (audio) {
           audio.pause();
           audio.currentTime = 0;
@@ -48,12 +71,14 @@ export default function Album() {
   }
 
   const stopOtherTracks = (currentIndex) => {
-    Object.entries(audioRefs.current).forEach(([index, audio]) => {
-      if (Number(index) !== currentIndex && audio) {
-        audio.pause();
-        audio.currentTime = 0;
+    Object.entries(audioRefs.current).forEach(
+      ([index, audio]) => {
+        if (Number(index) !== currentIndex && audio) {
+          audio.pause();
+          audio.currentTime = 0;
+        }
       }
-    });
+    );
   };
 
   const handlePlay = (index) => {
@@ -61,17 +86,52 @@ export default function Album() {
 
     if (!audio) return;
 
+    // Evita que a mesma faixa reinicie o temporizador
+    // sempre que o navegador emitir outro evento onPlay.
+    if (activeTrack === index && previewTimerRef.current) {
+      return;
+    }
+
     stopOtherTracks(index);
+    clearPreviewTimer();
+
+    audio.pause();
+    audio.currentTime = 0;
 
     setActiveTrack(index);
     setShowModal(false);
     setRemainingTime(PREVIEW_DURATION);
 
-    if (audio.currentTime >= PREVIEW_DURATION) {
+    const startedAt = Date.now();
+
+    const stopPreview = () => {
+      clearPreviewTimer();
+
+      audio.pause();
       audio.currentTime = 0;
-    }
+
+      setActiveTrack(null);
+      setShowModal(true);
+      setRemainingTime(PREVIEW_DURATION);
+    };
+
+    previewTimerRef.current = setInterval(() => {
+      const elapsed = (Date.now() - startedAt) / 1000;
+      const remaining = Math.max(
+        0,
+        Math.ceil(PREVIEW_DURATION - elapsed)
+      );
+
+      setRemainingTime(remaining);
+
+      if (elapsed >= PREVIEW_DURATION) {
+        stopPreview();
+      }
+    }, 200);
 
     audio.play().catch((error) => {
+      clearPreviewTimer();
+      setActiveTrack(null);
       console.error("Unable to play audio:", error);
     });
   };
@@ -79,7 +139,9 @@ export default function Album() {
   const handleTimeUpdate = (index) => {
     const audio = audioRefs.current[index];
 
-    if (!audio) return;
+    if (!audio || audio.paused || activeTrack !== index) {
+      return;
+    }
 
     const remaining = Math.max(
       0,
@@ -89,6 +151,8 @@ export default function Album() {
     setRemainingTime(remaining);
 
     if (audio.currentTime >= PREVIEW_DURATION) {
+      clearPreviewTimer();
+
       audio.pause();
       audio.currentTime = 0;
 
@@ -99,6 +163,7 @@ export default function Album() {
   };
 
   const handleEnded = () => {
+    clearPreviewTimer();
     setActiveTrack(null);
   };
 
@@ -111,6 +176,7 @@ export default function Album() {
       {/* Back Button */}
       <Link
         to="/"
+        onClick={stopAllTracks}
         className="inline-block mb-6 bg-gray-800 px-4 py-2 rounded hover:bg-gray-700"
       >
         ← {t("back_to_albums")}
@@ -151,7 +217,7 @@ export default function Album() {
             className="bg-gray-800 p-4 rounded-xl shadow"
           >
             <div className="flex flex-col gap-3">
-              {/* Song title */}
+              {/* Song Title */}
               <div className="flex items-center justify-between gap-4">
                 <h3 className="font-semibold">
                   {index + 1}. {track.title}
@@ -179,13 +245,18 @@ export default function Album() {
                 className="w-full"
                 onPlay={() => handlePlay(index)}
                 onTimeUpdate={() => handleTimeUpdate(index)}
+                onSeeking={(event) => {
+                  if (event.currentTarget.currentTime >= PREVIEW_DURATION) {
+                    event.currentTarget.currentTime = 0;
+                  }
+                }}
                 onEnded={handleEnded}
               >
                 <source src={track.file} type="audio/mpeg" />
                 Your browser does not support audio playback.
               </audio>
 
-              {/* Preview information */}
+              {/* Preview Information */}
               <p className="text-xs text-gray-400">
                 Preview: maximum 30 seconds
               </p>
@@ -211,7 +282,6 @@ export default function Album() {
             </p>
 
             <div className="space-y-3">
-              {/* Spotify */}
               <a
                 href={streamingLinks.spotify}
                 target="_blank"
@@ -221,7 +291,6 @@ export default function Album() {
                 🎧 Listen on Spotify
               </a>
 
-              {/* YouTube */}
               <a
                 href={streamingLinks.youtube}
                 target="_blank"
@@ -231,7 +300,6 @@ export default function Album() {
                 ▶️ Watch on YouTube
               </a>
 
-              {/* Facebook */}
               <a
                 href={streamingLinks.facebook}
                 target="_blank"
@@ -241,7 +309,6 @@ export default function Album() {
                 Facebook
               </a>
 
-              {/* TikTok */}
               <a
                 href={streamingLinks.tiktok}
                 target="_blank"
@@ -251,7 +318,6 @@ export default function Album() {
                 TikTok
               </a>
 
-              {/* Instagram */}
               <a
                 href={streamingLinks.instagram}
                 target="_blank"
@@ -274,3 +340,4 @@ export default function Album() {
     </div>
   );
 }
+```
