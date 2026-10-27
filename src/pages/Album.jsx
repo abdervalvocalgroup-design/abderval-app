@@ -1,3 +1,4 @@
+
 import { useParams, Link } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import { albums, streamingLinks } from "../data/musicData";
@@ -20,7 +21,7 @@ export default function Album() {
     useState(PREVIEW_DURATION);
 
   const clearPreviewTimer = () => {
-    if (previewTimerRef.current) {
+    if (previewTimerRef.current !== null) {
       clearInterval(previewTimerRef.current);
       previewTimerRef.current = null;
     }
@@ -37,13 +38,19 @@ export default function Album() {
     });
 
     setActiveTrack(null);
+    setRemainingTime(PREVIEW_DURATION);
   };
 
   useEffect(() => {
-    return () => {
-      clearPreviewTimer();
+    const audioElements = audioRefs.current;
 
-      Object.values(audioRefs.current).forEach((audio) => {
+    return () => {
+      if (previewTimerRef.current !== null) {
+        clearInterval(previewTimerRef.current);
+        previewTimerRef.current = null;
+      }
+
+      Object.values(audioElements).forEach((audio) => {
         if (audio) {
           audio.pause();
           audio.currentTime = 0;
@@ -85,9 +92,10 @@ export default function Album() {
 
     if (!audio) return;
 
-    // Evita que a mesma faixa reinicie o temporizador
-    // sempre que o navegador emitir outro evento onPlay.
-    if (activeTrack === index && previewTimerRef.current) {
+    if (
+      activeTrack === index &&
+      previewTimerRef.current !== null
+    ) {
       return;
     }
 
@@ -164,6 +172,7 @@ export default function Album() {
   const handleEnded = () => {
     clearPreviewTimer();
     setActiveTrack(null);
+    setRemainingTime(PREVIEW_DURATION);
   };
 
   const closeModal = () => {
@@ -172,7 +181,6 @@ export default function Album() {
 
   return (
     <div className="max-w-5xl mx-auto p-6 text-white">
-      {/* Back Button */}
       <Link
         to="/"
         onClick={stopAllTracks}
@@ -181,7 +189,6 @@ export default function Album() {
         ← {t("back_to_albums")}
       </Link>
 
-      {/* Album Header */}
       <div className="flex flex-col md:flex-row gap-6 mb-10">
         <img
           src={album.cover}
@@ -208,7 +215,6 @@ export default function Album() {
         </div>
       </div>
 
-      {/* Songs List */}
       <div className="space-y-6">
         {album.tracks.map((track, index) => (
           <div
@@ -216,7 +222,6 @@ export default function Album() {
             className="bg-gray-800 p-4 rounded-xl shadow"
           >
             <div className="flex flex-col gap-3">
-              {/* Song Title */}
               <div className="flex items-center justify-between gap-4">
                 <h3 className="font-semibold">
                   {index + 1}. {track.title}
@@ -229,7 +234,6 @@ export default function Album() {
                 )}
               </div>
 
-              {/* Audio Player */}
               <audio
                 ref={(element) => {
                   if (element) {
@@ -245,7 +249,10 @@ export default function Album() {
                 onPlay={() => handlePlay(index)}
                 onTimeUpdate={() => handleTimeUpdate(index)}
                 onSeeking={(event) => {
-                  if (event.currentTarget.currentTime >= PREVIEW_DURATION) {
+                  if (
+                    event.currentTarget.currentTime >=
+                    PREVIEW_DURATION
+                  ) {
                     event.currentTarget.currentTime = 0;
                   }
                 }}
@@ -255,7 +262,6 @@ export default function Album() {
                 Your browser does not support audio playback.
               </audio>
 
-              {/* Preview Information */}
               <p className="text-xs text-gray-400">
                 Preview: maximum 30 seconds
               </p>
@@ -264,7 +270,6 @@ export default function Album() {
         ))}
       </div>
 
-      {/* Continue Listening Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
           <div className="bg-gray-900 rounded-2xl shadow-2xl max-w-md w-full p-6 text-center border border-gray-700">
