@@ -1,4 +1,3 @@
-
 import { useParams, Link } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import { albums, streamingLinks } from "../data/musicData";
@@ -11,24 +10,24 @@ export default function Album() {
   const { t } = useTranslation();
 
   const album = albums.find((a) => a.id === id);
-
   const audioRefs = useRef({});
-  const previewTimerRef = useRef(null);
+  const timerRef = useRef(null);
+  const startedAtRef = useRef(0);
+  const stoppedRef = useRef(false);
 
   const [activeTrack, setActiveTrack] = useState(null);
   const [showModal, setShowModal] = useState(false);
-  const [remainingTime, setRemainingTime] =
-    useState(PREVIEW_DURATION);
+  const [remainingTime, setRemainingTime] = useState(PREVIEW_DURATION);
 
-  const clearPreviewTimer = () => {
-    if (previewTimerRef.current !== null) {
-      clearInterval(previewTimerRef.current);
-      previewTimerRef.current = null;
+  const clearTimer = () => {
+    if (timerRef.current !== null) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
     }
   };
 
   const stopAllTracks = () => {
-    clearPreviewTimer();
+    clearTimer();
 
     Object.values(audioRefs.current).forEach((audio) => {
       if (audio) {
@@ -37,23 +36,74 @@ export default function Album() {
       }
     });
 
+    stoppedRef.current = true;
     setActiveTrack(null);
     setRemainingTime(PREVIEW_DURATION);
+  };
+
+  const stopPreview = (index) => {
+    if (stoppedRef.current) return;
+
+    stoppedRef.current = true;
+    clearTimer();
+
+    const audio = audioRefs.current[index];
+
+    if (audio) {
+      audio.pause();
+      audio.currentTime = 0;
+    }
+
+    setActiveTrack(null);
+    setRemainingTime(PREVIEW_DURATION);
+    setShowModal(true);
+  };
+
+  const startPreview = (index) => {
+    const audio = audioRefs.current[index];
+    if (!audio) return;
+
+    clearTimer();
+
+    Object.entries(audioRefs.current).forEach(([key, otherAudio]) => {
+      if (otherAudio && Number(key) !== index) {
+        otherAudio.pause();
+        otherAudio.currentTime = 0;
+      }
+    });
+
+    stoppedRef.current = false;
+    startedAtRef.current = Date.now();
+
+    setActiveTrack(index);
+    setShowModal(false);
+    setRemainingTime(PREVIEW_DURATION);
+
+    timerRef.current = setInterval(() => {
+      if (stoppedRef.current) return;
+
+      const elapsed = (Date.now() - startedAtRef.current) / 1000;
+      const remaining = Math.max(0, Math.ceil(PREVIEW_DURATION - elapsed));
+
+      setRemainingTime(remaining);
+
+      if (elapsed >= PREVIEW_DURATION) {
+        stopPreview(index);
+      }
+    }, 200);
   };
 
   useEffect(() => {
     const audioElements = audioRefs.current;
 
     return () => {
-      if (previewTimerRef.current !== null) {
-        clearInterval(previewTimerRef.current);
-        previewTimerRef.current = null;
+      if (timerRef.current !== null) {
+        clearInterval(timerRef.current);
       }
 
       Object.values(audioElements).forEach((audio) => {
         if (audio) {
           audio.pause();
-          audio.currentTime = 0;
         }
       });
     };
@@ -65,7 +115,6 @@ export default function Album() {
         <h1 className="text-3xl font-bold mb-4">
           {t("album_not_found")}
         </h1>
-
         <Link
           to="/"
           className="bg-purple-600 px-4 py-2 rounded hover:bg-purple-700"
@@ -75,109 +124,6 @@ export default function Album() {
       </div>
     );
   }
-
-  const stopOtherTracks = (currentIndex) => {
-    Object.entries(audioRefs.current).forEach(
-      ([index, audio]) => {
-        if (Number(index) !== currentIndex && audio) {
-          audio.pause();
-          audio.currentTime = 0;
-        }
-      }
-    );
-  };
-
-  const handlePlay = (index) => {
-    const audio = audioRefs.current[index];
-
-    if (!audio) return;
-
-    if (
-      activeTrack === index &&
-      previewTimerRef.current !== null
-    ) {
-      return;
-    }
-
-    stopOtherTracks(index);
-    clearPreviewTimer();
-
-    audio.pause();
-    audio.currentTime = 0;
-
-    setActiveTrack(index);
-    setShowModal(false);
-    setRemainingTime(PREVIEW_DURATION);
-
-    const startedAt = Date.now();
-
-    const stopPreview = () => {
-      clearPreviewTimer();
-
-      audio.pause();
-      audio.currentTime = 0;
-
-      setActiveTrack(null);
-      setShowModal(true);
-      setRemainingTime(PREVIEW_DURATION);
-    };
-
-    previewTimerRef.current = setInterval(() => {
-      const elapsed = (Date.now() - startedAt) / 1000;
-      const remaining = Math.max(
-        0,
-        Math.ceil(PREVIEW_DURATION - elapsed)
-      );
-
-      setRemainingTime(remaining);
-
-      if (elapsed >= PREVIEW_DURATION) {
-        stopPreview();
-      }
-    }, 200);
-
-    audio.play().catch((error) => {
-      clearPreviewTimer();
-      setActiveTrack(null);
-      console.error("Unable to play audio:", error);
-    });
-  };
-
-  const handleTimeUpdate = (index) => {
-    const audio = audioRefs.current[index];
-
-    if (!audio || audio.paused || activeTrack !== index) {
-      return;
-    }
-
-    const remaining = Math.max(
-      0,
-      Math.ceil(PREVIEW_DURATION - audio.currentTime)
-    );
-
-    setRemainingTime(remaining);
-
-    if (audio.currentTime >= PREVIEW_DURATION) {
-      clearPreviewTimer();
-
-      audio.pause();
-      audio.currentTime = 0;
-
-      setActiveTrack(null);
-      setShowModal(true);
-      setRemainingTime(PREVIEW_DURATION);
-    }
-  };
-
-  const handleEnded = () => {
-    clearPreviewTimer();
-    setActiveTrack(null);
-    setRemainingTime(PREVIEW_DURATION);
-  };
-
-  const closeModal = () => {
-    setShowModal(false);
-  };
 
   return (
     <div className="max-w-5xl mx-auto p-6 text-white">
@@ -197,18 +143,13 @@ export default function Album() {
         />
 
         <div>
-          <h1 className="text-4xl font-bold mb-3">
-            {album.title}
-          </h1>
-
+          <h1 className="text-4xl font-bold mb-3">{album.title}</h1>
           <p className="text-gray-400 text-lg">
             {t("released")}: {album.year}
           </p>
-
           <p className="mt-4 text-gray-300">
             {album.tracks.length} {t("songs")}
           </p>
-
           <p className="mt-4 text-sm text-gray-400">
             🎵 You can listen to a 30-second preview of each song.
           </p>
@@ -217,10 +158,7 @@ export default function Album() {
 
       <div className="space-y-6">
         {album.tracks.map((track, index) => (
-          <div
-            key={index}
-            className="bg-gray-800 p-4 rounded-xl shadow"
-          >
+          <div key={index} className="bg-gray-800 p-4 rounded-xl shadow">
             <div className="flex flex-col gap-3">
               <div className="flex items-center justify-between gap-4">
                 <h3 className="font-semibold">
@@ -246,17 +184,39 @@ export default function Album() {
                 controlsList="nodownload noplaybackrate"
                 preload="metadata"
                 className="w-full"
-                onPlay={() => handlePlay(index)}
-                onTimeUpdate={() => handleTimeUpdate(index)}
-                onSeeking={(event) => {
+                onPlay={() => {
+                  if (activeTrack !== index || stoppedRef.current) {
+                    startPreview(index);
+                  }
+                }}
+                onPause={() => {
+                  if (activeTrack === index && !stoppedRef.current) {
+                    clearTimer();
+                    setActiveTrack(null);
+                  }
+                }}
+                onTimeUpdate={() => {
+                  const audio = audioRefs.current[index];
+
                   if (
-                    event.currentTarget.currentTime >=
-                    PREVIEW_DURATION
+                    audio &&
+                    !audio.paused &&
+                    activeTrack === index &&
+                    audio.currentTime >= PREVIEW_DURATION
                   ) {
+                    stopPreview(index);
+                  }
+                }}
+                onSeeking={(event) => {
+                  if (event.currentTarget.currentTime >= PREVIEW_DURATION) {
                     event.currentTarget.currentTime = 0;
                   }
                 }}
-                onEnded={handleEnded}
+                onEnded={() => {
+                  if (!stoppedRef.current && activeTrack === index) {
+                    stopPreview(index);
+                  }
+                }}
               >
                 <source src={track.file} type="audio/mpeg" />
                 Your browser does not support audio playback.
@@ -333,7 +293,7 @@ export default function Album() {
             </div>
 
             <button
-              onClick={closeModal}
+              onClick={() => setShowModal(false)}
               className="mt-6 text-gray-400 hover:text-white underline"
             >
               Close
