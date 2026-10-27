@@ -1,4 +1,3 @@
-```jsx
 import { useParams, Link } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import { albums, streamingLinks } from "../data/musicData";
@@ -340,4 +339,3 @@ export default function Album() {
     </div>
   );
 }
-```
